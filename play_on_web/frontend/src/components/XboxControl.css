@@ -1,0 +1,130 @@
+.xbox-control {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.gamepad-prompt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+  border: 2px dashed var(--gray-300);
+}
+
+.prompt-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.gamepad-prompt h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.25rem;
+  color: var(--gray-900);
+}
+
+.gamepad-prompt p {
+  margin: 0;
+  color: var(--gray-600);
+}
+
+.gamepad-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--success-light);
+  border-radius: var(--radius);
+  font-weight: 600;
+  color: var(--success);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.gamepad-layout {
+  padding: 2rem;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+}
+
+.gamepad-svg {
+  width: 100%;
+  height: auto;
+  max-width: 400px;
+  margin: 0 auto;
+  display: block;
+}
+
+.control-mapping h4 {
+  margin: 0 0 1rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mapping-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--gray-50);
+  border-radius: var(--radius);
+}
+
+.mapping-input {
+  flex: 1;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.mapping-arrow {
+  color: var(--gray-400);
+  font-weight: 600;
+}
+
+.mapping-output {
+  flex: 1;
+  text-align: right;
+  color: var(--primary);
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .gamepad-layout {
+    padding: 1rem;
+  }
+  
+  .mapping-item {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+  }
+  
+  .mapping-output {
+    text-align: center;
+  }
+}
+

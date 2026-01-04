@@ -1,0 +1,24 @@
+# XLerobot Web Teleop 后端依赖
+# 
+# 注意: 本项目设计为在 lerobot conda 环境中运行
+# 请先安装 lerobot: cd ../lerobot && pip install -e .[all]
+# 
+# 以下是 play_on_web 额外需要的 Web 服务依赖
+# lerobot 已经提供: opencv-python, numpy, pyserial 等
+
+# Web 框架
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+python-multipart==0.0.6
+
+# WebSocket 支持
+websockets==12.0
+
+# 配置管理（lerobot 已有 pydantic，但可能版本不同）
+pydantic==2.5.3
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+
+# 异步文件操作
+aiofiles==23.2.1
+
