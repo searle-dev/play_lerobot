@@ -2,11 +2,43 @@ import { useState } from 'react'
 import './App.css'
 import DeviceSetup from './components/DeviceSetup'
 import TeleopControl from './components/TeleopControl'
+import KeymapSettings from './pages/KeymapSettings'
 import { useRobotStore } from './stores/robotStore'
 
+type Page = 'setup' | 'teleop' | 'keymap-settings'
+
 function App() {
-  const [setupComplete, setSetupComplete] = useState(false)
+  const [currentPage, setCurrentPage] = useState<Page>('setup')
   const { isConnected } = useRobotStore()
+
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'setup':
+        return <DeviceSetup onComplete={() => setCurrentPage('teleop')} />
+      case 'teleop':
+        return (
+          <TeleopControl
+            onBack={() => setCurrentPage('setup')}
+            onOpenSettings={() => setCurrentPage('keymap-settings')}
+          />
+        )
+      case 'keymap-settings':
+        return <KeymapSettings />
+      default:
+        return null
+    }
+  }
+
+  // 设置页面有自己的导航，不需要显示header和footer
+  if (currentPage === 'keymap-settings') {
+    return (
+      <div className="app">
+        <main className="app-main">
+          {renderPage()}
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="app">
@@ -23,11 +55,7 @@ function App() {
       </header>
 
       <main className="app-main">
-        {!setupComplete ? (
-          <DeviceSetup onComplete={() => setSetupComplete(true)} />
-        ) : (
-          <TeleopControl onBack={() => setSetupComplete(false)} />
-        )}
+        {renderPage()}
       </main>
 
       <footer className="app-footer">

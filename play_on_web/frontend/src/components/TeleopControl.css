@@ -97,21 +97,40 @@
   }
 }
 
+/* 设置按钮样式 */
+.btn-settings {
+  padding: 0.5rem 1rem;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-settings:hover {
+  background: #2980b9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
 @media (max-width: 768px) {
   .control-header {
     flex-direction: column;
   }
-  
+
   .control-header-left,
   .control-header-right {
     width: 100%;
     flex-wrap: wrap;
   }
-  
+
   .control-mode-toggle {
     width: 100%;
   }
-  
+
   .mode-btn {
     flex: 1;
   }

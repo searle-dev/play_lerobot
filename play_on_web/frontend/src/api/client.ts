@@ -1,4 +1,11 @@
 import axios from 'axios'
+import type {
+  KeyboardKeymap,
+  SwitchProfileRequest,
+  CreateProfileRequest,
+  UpdateProfileRequest,
+  ValidateKeymapRequest
+} from '../types/keymap'
 
 const API_BASE_URL = (import.meta as any).env?.VITE_API_BASE_URL || '/api'
 
@@ -60,6 +67,43 @@ export const cameraApi = {
     apiClient.delete(`/cameras/${name}`),
   getFrame: (name: string) =>
     apiClient.get(`/cameras/${name}/frame`, { responseType: 'blob' }),
+}
+
+// 键位配置管理 API
+export const keymapApi = {
+  // 获取所有配置预设
+  getProfiles: () => apiClient.get('/keymap/profiles'),
+
+  // 获取当前激活的键位配置
+  getCurrentKeymap: () => apiClient.get('/keymap/current'),
+
+  // 获取完整配置
+  getConfig: () => apiClient.get('/keymap/config'),
+
+  // 切换配置预设
+  switchProfile: (profileName: string) =>
+    apiClient.post<SwitchProfileRequest>('/keymap/profile/switch', { profile: profileName }),
+
+  // 创建新配置预设
+  createProfile: (profileName: string, name: string, description: string, keymap: KeyboardKeymap) =>
+    apiClient.post<CreateProfileRequest>('/keymap/profile/create', {
+      profile_name: profileName,
+      name,
+      description,
+      keymap
+    }),
+
+  // 更新配置预设
+  updateProfile: (profileName: string, keymap: KeyboardKeymap) =>
+    apiClient.put<UpdateProfileRequest>(`/keymap/profile/${profileName}`, { keymap }),
+
+  // 删除配置预设
+  deleteProfile: (profileName: string) =>
+    apiClient.delete(`/keymap/profile/${profileName}`),
+
+  // 验证键位配置
+  validate: (keymap: KeyboardKeymap) =>
+    apiClient.post<ValidateKeymapRequest>('/keymap/validate', { keymap }),
 }
 
 // WebSocket 连接

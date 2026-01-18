@@ -96,6 +96,29 @@ class StepLevelRequest(BaseModel):
     level: str = "normal"  # "slow", "normal", "fast"
 
 
+class KeymapProfileSwitchRequest(BaseModel):
+    """键位配置预设切换请求"""
+    profile: str
+
+
+class KeymapProfileCreateRequest(BaseModel):
+    """键位配置预设创建请求"""
+    profile_name: str
+    name: str
+    description: str
+    keymap: dict
+
+
+class KeymapProfileUpdateRequest(BaseModel):
+    """键位配置预设更新请求"""
+    keymap: dict
+
+
+class KeymapValidateRequest(BaseModel):
+    """键位配置验证请求"""
+    keymap: dict
+
+
 # ==================== HTTP 端点 ====================
 
 @app.get("/")
@@ -252,8 +275,95 @@ async def get_observation():
     """获取机器人观测值"""
     if not robot_controller:
         raise HTTPException(status_code=400, detail="机器人未连接")
-    
+
     result = robot_controller.get_observation()
+    return result
+
+
+# ==================== 键位配置管理端点 ====================
+
+@app.get("/api/keymap/profiles")
+async def get_keymap_profiles():
+    """获取所有键位配置预设"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.get_all_keymap_profiles()
+    return result
+
+
+@app.get("/api/keymap/current")
+async def get_current_keymap():
+    """获取当前激活的键位配置"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.get_current_keymap()
+    return result
+
+
+@app.get("/api/keymap/config")
+async def get_keymap_config():
+    """获取完整的键位配置"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.get_keymap_config()
+    return result
+
+
+@app.post("/api/keymap/profile/switch")
+async def switch_keymap_profile(request: KeymapProfileSwitchRequest):
+    """切换键位配置预设"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.switch_keymap_profile(request.profile)
+    return result
+
+
+@app.post("/api/keymap/profile/create")
+async def create_keymap_profile(request: KeymapProfileCreateRequest):
+    """创建新的键位配置预设"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.create_keymap_profile(
+        request.profile_name,
+        request.name,
+        request.description,
+        request.keymap
+    )
+    return result
+
+
+@app.put("/api/keymap/profile/{profile_name}")
+async def update_keymap_profile(profile_name: str, request: KeymapProfileUpdateRequest):
+    """更新指定的键位配置预设"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.update_keymap_profile(profile_name, request.keymap)
+    return result
+
+
+@app.delete("/api/keymap/profile/{profile_name}")
+async def delete_keymap_profile(profile_name: str):
+    """删除键位配置预设"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.delete_keymap_profile(profile_name)
+    return result
+
+
+@app.post("/api/keymap/validate")
+async def validate_keymap(request: KeymapValidateRequest):
+    """验证键位配置"""
+    if not robot_controller:
+        raise HTTPException(status_code=400, detail="机器人未连接")
+
+    result = robot_controller.validate_keymap(request.keymap)
     return result
 
 

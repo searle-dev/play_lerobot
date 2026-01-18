@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any, Optional
 from dataclasses import dataclass
 
+from keymap_manager import KeymapManager
+
 logger = logging.getLogger(__name__)
 
 # 复位位置配置文件路径
@@ -104,9 +106,13 @@ class RobotController:
         }
         
         self._is_connected = False
-        
+
         # 加载复位位置配置
         self.reset_positions = self._load_reset_positions()
+
+        # 初始化键位映射管理器
+        self.keymap_manager = KeymapManager()
+        logger.info(f"键位映射管理器已初始化，当前预设: {self.keymap_manager.current_profile}")
     
     def connect(self) -> dict[str, Any]:
         """连接机器人"""
@@ -617,5 +623,82 @@ class RobotController:
         return {
             "status": "success",
             "reset_positions": self.reset_positions
+        }
+
+    # ==================== 键位映射配置管理 ====================
+
+    def get_keymap_config(self) -> dict[str, Any]:
+        """获取完整的键位配置"""
+        return {
+            "status": "success",
+            "config": self.keymap_manager.get_full_config()
+        }
+
+    def get_all_keymap_profiles(self) -> dict[str, Any]:
+        """获取所有配置预设"""
+        return {
+            "status": "success",
+            "profiles": self.keymap_manager.get_all_profiles(),
+            "current_profile": self.keymap_manager.current_profile
+        }
+
+    def get_current_keymap(self) -> dict[str, Any]:
+        """获取当前激活的键位配置"""
+        keymap = self.keymap_manager.get_current_keymap()
+        if keymap:
+            return {
+                "status": "success",
+                "keymap": keymap,
+                "profile": self.keymap_manager.current_profile
+            }
+        else:
+            return {
+                "status": "error",
+                "message": "无法获取当前键位配置"
+            }
+
+    def switch_keymap_profile(self, profile_name: str) -> dict[str, Any]:
+        """切换配置预设"""
+        success, message = self.keymap_manager.switch_profile(profile_name)
+        return {
+            "status": "success" if success else "error",
+            "message": message,
+            "current_profile": self.keymap_manager.current_profile if success else None
+        }
+
+    def create_keymap_profile(self, profile_name: str, name: str,
+                             description: str, keymap: dict) -> dict[str, Any]:
+        """创建新的配置预设"""
+        success, message = self.keymap_manager.create_profile(
+            profile_name, name, description, keymap
+        )
+        return {
+            "status": "success" if success else "error",
+            "message": message
+        }
+
+    def update_keymap_profile(self, profile_name: str, keymap: dict) -> dict[str, Any]:
+        """更新配置预设"""
+        success, message = self.keymap_manager.update_profile(profile_name, keymap)
+        return {
+            "status": "success" if success else "error",
+            "message": message
+        }
+
+    def delete_keymap_profile(self, profile_name: str) -> dict[str, Any]:
+        """删除配置预设"""
+        success, message = self.keymap_manager.delete_profile(profile_name)
+        return {
+            "status": "success" if success else "error",
+            "message": message
+        }
+
+    def validate_keymap(self, keymap: dict) -> dict[str, Any]:
+        """验证键位配置"""
+        valid, message = self.keymap_manager.validate_keymap(keymap)
+        return {
+            "status": "success" if valid else "error",
+            "message": message,
+            "valid": valid
         }
 

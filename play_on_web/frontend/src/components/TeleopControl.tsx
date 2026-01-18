@@ -9,9 +9,10 @@ import { createTeleopWebSocket, robotApi } from '../api/client'
 
 interface TeleopControlProps {
   onBack: () => void
+  onOpenSettings?: () => void
 }
 
-function TeleopControl({ onBack }: TeleopControlProps) {
+function TeleopControl({ onBack, onOpenSettings }: TeleopControlProps) {
   const { controlMode, setControlMode, teleopWs, setTeleopWs, setObservation, setIsConnected } = useRobotStore()
   const [showStatus, setShowStatus] = useState(true)
   const [stepLevel, setStepLevel] = useState('normal')
@@ -109,6 +110,11 @@ function TeleopControl({ onBack }: TeleopControlProps) {
           <button onClick={() => setShowStatus(!showStatus)} className="btn btn-text">
             {showStatus ? '隐藏状态' : '显示状态'}
           </button>
+          {onOpenSettings && (
+            <button onClick={onOpenSettings} className="btn btn-settings">
+              ⚙️ 键位配置
+            </button>
+          )}
         </div>
         
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
