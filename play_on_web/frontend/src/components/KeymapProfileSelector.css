@@ -1,0 +1,156 @@
+.keymap-profile-selector {
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.profile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.profile-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.create-profile-btn {
+  padding: 8px 16px;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.create-profile-btn:hover {
+  background: #2980b9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.3);
+}
+
+.profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: white;
+  border: 2px solid #e1e8ed;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.profile-item.active {
+  border-color: #3498db;
+  background: #ebf5fb;
+  box-shadow: 0 2px 8px rgba(52, 152, 219, 0.2);
+}
+
+.profile-info {
+  flex: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.profile-item:not(.active) .profile-info:hover {
+  opacity: 0.8;
+}
+
+.profile-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 4px;
+}
+
+.current-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #3498db;
+  color: white;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 12px;
+}
+
+.builtin-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #95a5a6;
+  color: white;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 12px;
+}
+
+.profile-description {
+  font-size: 14px;
+  color: #7f8c8d;
+}
+
+.delete-btn {
+  padding: 6px 16px;
+  background: transparent;
+  color: #e74c3c;
+  border: 1px solid #e74c3c;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.delete-btn:hover {
+  background: #e74c3c;
+  color: white;
+}
+
+.delete-btn.confirm {
+  background: #c0392b;
+  color: white;
+  border-color: #c0392b;
+  animation: shake 0.5s ease-in-out;
+}
+
+/* 动画 */
+@keyframes shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .profile-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .delete-btn {
+    align-self: flex-end;
+  }
+}
