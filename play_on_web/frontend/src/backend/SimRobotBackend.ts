@@ -18,9 +18,19 @@ export class SimRobotBackend implements RobotBackend {
 
   get isConnected() { return this._isConnected }
 
-  /** Attach a DOM container for rendering. Must be called before connect(). */
+  /** Attach a DOM container for rendering. Can be called before or after connect(). */
   setContainer(container: HTMLElement): void {
     this.container = container
+
+    // If engine already loaded but renderer not yet created, create it now
+    if (this.engine.initialized && !this.renderer) {
+      this.renderer = new SimRenderer(container)
+      this.renderer.buildScene(
+        this.engine.getModel(),
+        this.engine.getData(),
+        this.engine.getMuJoCo()
+      )
+    }
   }
 
   async connect(config: Record<string, unknown>): Promise<void> {
