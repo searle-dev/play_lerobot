@@ -10,17 +10,21 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@sparkjsdev/spark": "^0.1.10",
     "@types/react-router-dom": "^5.3.3",
     "axios": "^1.6.5",
     "clsx": "^2.1.0",
+    "mujoco-js": "^0.0.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.12.0",
+    "three": "^0.178.0",
     "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "@types/three": "^0.178.1",
     "@typescript-eslint/eslint-plugin": "^6.19.0",
     "@typescript-eslint/parser": "^6.19.0",
     "@vitejs/plugin-react": "^4.2.1",
