@@ -60,3 +60,6 @@ coverage/
 *.tmp
 .cache/
 
+# Simulation assets (large binary files - mesh STL, SPZ, WASM)
+frontend/public/sim-assets/
+
