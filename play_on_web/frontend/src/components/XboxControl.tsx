@@ -3,7 +3,8 @@ import './XboxControl.css'
 import { useRobotStore } from '../stores/robotStore'
 
 function XboxControl() {
-  const { teleopWs } = useRobotStore()
+  const { teleopWs, mode, backend } = useRobotStore()
+  const isSimMode = mode === 'sim'
   const [gamepadConnected, setGamepadConnected] = useState(false)
   const [gamepadIndex, setGamepadIndex] = useState<number | null>(null)
   const [buttonStates, setButtonStates] = useState<boolean[]>([])
@@ -54,45 +55,37 @@ function XboxControl() {
       window.removeEventListener('gamepaddisconnected', handleGamepadDisconnected)
       clearInterval(intervalId)
     }
-  }, [gamepadIndex, teleopWs])
-  
+  }, [gamepadIndex, teleopWs, isSimMode, backend])
+
   const handleGamepadInput = (gamepad: Gamepad) => {
+    const axes = Array.from(gamepad.axes)
+    const buttons = gamepad.buttons.map((btn) => btn.pressed)
+
+    // Route through backend if available
+    if (isSimMode && backend) {
+      backend.onGamepadInput({ axes, buttons })
+      return
+    }
+
     if (!teleopWs || teleopWs.readyState !== WebSocket.OPEN) return
-    
-    // 参考 5_xlerobot_teleop_xbox.py 的映射
-    // 这里简化处理，实际应该根据完整的映射表处理
-    
-    // 左摇杆控制左臂 XY
-    const leftStickX = gamepad.axes[0]
-    const leftStickY = gamepad.axes[1]
-    
-    if (Math.abs(leftStickX) > 0.5) {
-      const action = leftStickX > 0 ? 'y+' : 'y-'
-      sendArmAction('left', action)
+
+    // Left stick controls left arm XY
+    if (Math.abs(axes[0]) > 0.5) {
+      sendArmAction('left', axes[0] > 0 ? 'y+' : 'y-')
     }
-    if (Math.abs(leftStickY) > 0.5) {
-      const action = leftStickY > 0 ? 'x-' : 'x+'
-      sendArmAction('left', action)
+    if (Math.abs(axes[1]) > 0.5) {
+      sendArmAction('left', axes[1] > 0 ? 'x-' : 'x+')
     }
-    
-    // 右摇杆控制右臂 XY
-    const rightStickX = gamepad.axes[2]
-    const rightStickY = gamepad.axes[3]
-    
-    if (Math.abs(rightStickX) > 0.5) {
-      const action = rightStickX > 0 ? 'y+' : 'y-'
-      sendArmAction('right', action)
+
+    // Right stick controls right arm XY
+    if (Math.abs(axes[2]) > 0.5) {
+      sendArmAction('right', axes[2] > 0 ? 'y+' : 'y-')
     }
-    if (Math.abs(rightStickY) > 0.5) {
-      const action = rightStickY > 0 ? 'x-' : 'x+'
-      sendArmAction('right', action)
+    if (Math.abs(axes[3]) > 0.5) {
+      sendArmAction('right', axes[3] > 0 ? 'x-' : 'x+')
     }
-    
-    // D-Pad 控制底盘
-    // 注意：D-Pad 通常映射到 axes[9] (横向) 和 axes[10] (纵向)，或者按钮
-    // 这里需要根据实际手柄调整
   }
-  
+
   const sendArmAction = (arm: string, action: string) => {
     if (teleopWs && teleopWs.readyState === WebSocket.OPEN) {
       teleopWs.send(JSON.stringify({
