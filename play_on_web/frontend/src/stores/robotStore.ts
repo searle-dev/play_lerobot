@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { KeymapConfig } from '../types/keymap'
+import type { RobotBackend, RobotMode, SimConfig } from '../backend/types'
 
 export interface Port {
   name: string
@@ -60,6 +61,14 @@ interface RobotStore {
 
   currentProfile: string
   setCurrentProfile: (profile: string) => void
+
+  // 模式与后端
+  mode: RobotMode
+  setMode: (mode: RobotMode) => void
+  simConfig: SimConfig | null
+  setSimConfig: (config: SimConfig | null) => void
+  backend: RobotBackend | null
+  setBackend: (backend: RobotBackend | null) => void
 }
 
 export const useRobotStore = create<RobotStore>((set) => ({
@@ -101,5 +110,13 @@ export const useRobotStore = create<RobotStore>((set) => ({
 
   currentProfile: 'default',
   setCurrentProfile: (profile) => set({ currentProfile: profile }),
+
+  // 模式与后端
+  mode: 'real',
+  setMode: (mode) => set({ mode }),
+  simConfig: null,
+  setSimConfig: (config) => set({ simConfig: config }),
+  backend: null,
+  setBackend: (backend) => set({ backend }),
 }))
 
