@@ -2,23 +2,70 @@ import { useState } from 'react'
 import './App.css'
 import DeviceSetup from './components/DeviceSetup'
 import TeleopControl from './components/TeleopControl'
+import SimSetup from './components/SimSetup'
 import KeymapSettings from './pages/KeymapSettings'
 import { useRobotStore } from './stores/robotStore'
 
-type Page = 'setup' | 'teleop' | 'keymap-settings'
+type Page = 'mode-select' | 'setup' | 'sim-setup' | 'teleop' | 'keymap-settings'
 
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('setup')
-  const { isConnected } = useRobotStore()
+  const [currentPage, setCurrentPage] = useState<Page>('mode-select')
+  const { isConnected, setMode } = useRobotStore()
+
+  const handleModeSelect = (mode: 'real' | 'sim') => {
+    setMode(mode)
+    if (mode === 'real') {
+      setCurrentPage('setup')
+    } else {
+      setCurrentPage('sim-setup')
+    }
+  }
 
   const renderPage = () => {
     switch (currentPage) {
+      case 'mode-select':
+        return (
+          <div className="mode-select">
+            <div className="setup-card">
+              <div className="setup-header">
+                <h2 className="setup-title">Select Mode</h2>
+              </div>
+              <div className="setup-content">
+                <div className="mode-options">
+                  <button
+                    className="mode-card"
+                    onClick={() => handleModeSelect('real')}
+                  >
+                    <div className="mode-icon">🤖</div>
+                    <strong>Real Robot</strong>
+                    <span>Connect to physical hardware via serial ports</span>
+                  </button>
+                  <button
+                    className="mode-card"
+                    onClick={() => handleModeSelect('sim')}
+                  >
+                    <div className="mode-icon">🎮</div>
+                    <strong>Simulation</strong>
+                    <span>Run MuJoCo physics simulation in browser</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
       case 'setup':
         return <DeviceSetup onComplete={() => setCurrentPage('teleop')} />
+      case 'sim-setup':
+        return (
+          <SimSetup
+            onComplete={() => setCurrentPage('teleop')}
+            onBack={() => setCurrentPage('mode-select')}
+          />
+        )
       case 'teleop':
         return (
           <TeleopControl
-            onBack={() => setCurrentPage('setup')}
+            onBack={() => setCurrentPage('mode-select')}
             onOpenSettings={() => setCurrentPage('keymap-settings')}
           />
         )
@@ -29,7 +76,6 @@ function App() {
     }
   }
 
-  // 设置页面有自己的导航，不需要显示header和footer
   if (currentPage === 'keymap-settings') {
     return (
       <div className="app">
@@ -66,4 +112,3 @@ function App() {
 }
 
 export default App
-
