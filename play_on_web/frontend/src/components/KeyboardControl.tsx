@@ -103,14 +103,30 @@ function KeyboardControl() {
     return reverse
   }, [keymap])
 
-  // Loading state guard - must be before other hooks
-  if (!keymap || !reverseKeymap) {
-    return (
-      <div className="keyboard-control">
-        <h3 className="control-title">Keyboard Control</h3>
-        <div className="loading-keymap">Loading keymap...</div>
-      </div>
-    )
+  const sendAction = (arm: string, action: string) => {
+    if (teleopWs && teleopWs.readyState === WebSocket.OPEN) {
+      teleopWs.send(JSON.stringify({
+        type: 'keyboard_action',
+        data: { arm, action }
+      }))
+    }
+  }
+
+  const sendBaseAction = (direction: string) => {
+    if (teleopWs && teleopWs.readyState === WebSocket.OPEN) {
+      teleopWs.send(JSON.stringify({
+        type: 'base_action',
+        data: { direction }
+      }))
+    }
+  }
+
+  const sendBaseStop = () => {
+    if (teleopWs && teleopWs.readyState === WebSocket.OPEN) {
+      teleopWs.send(JSON.stringify({
+        type: 'base_stop'
+      }))
+    }
   }
 
   useEffect(() => {
@@ -181,33 +197,16 @@ function KeyboardControl() {
     }
   }, [teleopWs, reverseKeymap, isSimMode, backend])
 
-  const sendAction = (arm: string, action: string) => {
-    if (teleopWs && teleopWs.readyState === WebSocket.OPEN) {
-      teleopWs.send(JSON.stringify({
-        type: 'keyboard_action',
-        data: { arm, action }
-      }))
-    }
-  }
-
-  const sendBaseAction = (direction: string) => {
-    if (teleopWs && teleopWs.readyState === WebSocket.OPEN) {
-      teleopWs.send(JSON.stringify({
-        type: 'base_action',
-        data: { direction }
-      }))
-    }
-  }
-
-  const sendBaseStop = () => {
-    if (teleopWs && teleopWs.readyState === WebSocket.OPEN) {
-      teleopWs.send(JSON.stringify({
-        type: 'base_stop'
-      }))
-    }
-  }
-
   const isKeyPressed = (key: string) => pressedKeys.has(key)
+
+  if (!keymap || !reverseKeymap) {
+    return (
+      <div className="keyboard-control">
+        <h3 className="control-title">Keyboard Control</h3>
+        <div className="loading-keymap">Loading keymap...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="keyboard-control">
