@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Record the current XLeRobot pose used by the Xbox Back reset action."""
+"""Record the current XLeRobot pose with real-time preview."""
 
 from __future__ import annotations
 
@@ -7,12 +7,15 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 LEROBOT_SRC = ROOT_DIR / "lerobot" / "src"
 DEFAULT_RESET_POSE = ROOT_DIR / "config" / "reset_pose.json"
+
+JOINTS = ["shoulder_pan", "shoulder_lift", "elbow_flex", "wrist_flex", "wrist_roll", "gripper"]
 
 
 def load_dotenv(path: Path) -> None:
@@ -36,6 +39,42 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def read_pose(obs: dict) -> dict:
+    return {
+        "left_arm": {j: obs[f"left_arm_{j}.pos"] for j in JOINTS},
+        "right_arm": {j: obs[f"right_arm_{j}.pos"] for j in JOINTS},
+        "head": {
+            "head_motor_1": obs["head_motor_1.pos"],
+            "head_motor_2": obs["head_motor_2.pos"],
+        },
+    }
+
+
+def print_pose(pose: dict) -> None:
+    print("\033[2J\033[H", end="")  # clear screen
+    print("=" * 70)
+    print("  REAL-TIME JOINT ANGLES  —  adjust arms then press Enter to save")
+    print("  Ctrl+C to quit without saving")
+    print("=" * 70)
+    print()
+    print(f"  {'Joint':<16} {'Left':>10} {'Right':>10} {'Diff':>10}")
+    print(f"  {'─' * 16} {'─' * 10} {'─' * 10} {'─' * 10}")
+    for j in JOINTS:
+        l = pose["left_arm"][j]
+        r = pose["right_arm"][j]
+        diff = abs(l - r)
+        flag = " ⚠" if diff > 5 else ""
+        print(f"  {j:<16} {l:>10.1f} {r:>10.1f} {diff:>10.1f}{flag}")
+    print()
+    h1 = pose["head"]["head_motor_1"]
+    h2 = pose["head"]["head_motor_2"]
+    print(f"  {'head_motor_1':<16} {h1:>10.1f}")
+    print(f"  {'head_motor_2':<16} {h2:>10.1f}")
+    print()
+    print("  ⚠ = diff > 5°, check if arms are symmetric")
+    print()
+
+
 def main() -> None:
     args = parse_args()
     sys.path.insert(0, str(LEROBOT_SRC))
@@ -44,38 +83,40 @@ def main() -> None:
 
     robot = XLerobot(XLerobotConfig(id=args.robot_id, port1=args.port1, port2=args.port2))
     print(f"Connecting with port1={args.port1}, port2={args.port2}")
+
+    import select
+    import termios
+    import tty
+
+    old_settings = termios.tcgetattr(sys.stdin)
     try:
-        robot.connect(calibrate=False)
-        obs = robot.get_observation()
-        pose = {
-            "left_arm": {
-                "shoulder_pan": obs["left_arm_shoulder_pan.pos"],
-                "shoulder_lift": obs["left_arm_shoulder_lift.pos"],
-                "elbow_flex": obs["left_arm_elbow_flex.pos"],
-                "wrist_flex": obs["left_arm_wrist_flex.pos"],
-                "wrist_roll": obs["left_arm_wrist_roll.pos"],
-                "gripper": obs["left_arm_gripper.pos"],
-            },
-            "right_arm": {
-                "shoulder_pan": obs["right_arm_shoulder_pan.pos"],
-                "shoulder_lift": obs["right_arm_shoulder_lift.pos"],
-                "elbow_flex": obs["right_arm_elbow_flex.pos"],
-                "wrist_flex": obs["right_arm_wrist_flex.pos"],
-                "wrist_roll": obs["right_arm_wrist_roll.pos"],
-                "gripper": obs["right_arm_gripper.pos"],
-            },
-            "head": {
-                "head_motor_1": obs["head_motor_1.pos"],
-                "head_motor_2": obs["head_motor_2.pos"],
-            },
-        }
+        robot.connect()
+        tty.setcbreak(sys.stdin.fileno())
+
+        pose = None
+        while True:
+            obs = robot.get_observation()
+            pose = read_pose(obs)
+            print_pose(pose)
+            print("  >>> Press Enter to SAVE, Ctrl+C to cancel <<<")
+
+            # Check for Enter key (non-blocking)
+            if select.select([sys.stdin], [], [], 0.2)[0]:
+                ch = sys.stdin.read(1)
+                if ch in ("\n", "\r"):
+                    break
+
+        # Save
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(pose, indent=2) + "\n")
+        print(f"\n  ✅ Reset pose saved to {args.output}\n")
+
+    except KeyboardInterrupt:
+        print("\n  Cancelled, nothing saved.\n")
     finally:
+        termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
         if robot.is_connected:
             robot.disconnect()
-
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(pose, indent=2) + "\n")
-    print(f"Reset pose saved to {args.output}")
 
 
 if __name__ == "__main__":
