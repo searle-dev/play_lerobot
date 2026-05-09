@@ -39,3 +39,10 @@ cp "${XLEROBOT_DIR}/software/examples/7_xlerobot_teleop_joycon.py" \
   "${LEROBOT_DIR}/examples/xlerobot/7_xlerobot_teleop_joycon.py"
 
 echo "Synced XLeRobot sources into ${LEROBOT_DIR}"
+
+# Apply local patches (macOS HID compatibility, etc.)
+for p in "${ROOT_DIR}"/patches/*.patch; do
+  [[ -f "$p" ]] || continue
+  echo "Applying patch: $(basename "$p")"
+  patch -d "${ROOT_DIR}" -p0 --forward -s < "$p" || true
+done

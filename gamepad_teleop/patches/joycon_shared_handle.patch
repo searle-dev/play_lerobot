@@ -1,0 +1,59 @@
+--- XLeRobot/software/joyconrobotics/joyconrobotics.py	2026-05-09 12:37:54
++++ lerobot/src/joyconrobotics/joyconrobotics.py	2026-05-09 13:36:26
+@@ -4,8 +4,6 @@
+ import time
+ from glm import vec3, quat, angleAxis
+ 
+-from .joycon import JoyCon
+-from .gyro import GyroTrackingJoyCon
+ from .event import ButtonEventJoyCon
+ from .device import get_R_id, get_L_id
+ 
+@@ -16,6 +14,19 @@
+ 
+ JOYCON_SERIAL_SUPPORT = '9c:54:'
+ 
++
++class SharedJoyCon(ButtonEventJoyCon):
++    """Single HID handle used for buttons, sticks, and IMU data."""
++
++    def calibrate(self, seconds=2):
++        # The XLeRobot control path estimates attitude from raw IMU values in
++        # AttitudeEstimator, so the separate GyroTrackingJoyCon calibration
++        # handle is not needed.
++        return None
++
++    def reset_orientation(self):
++        return None
++
+ class LowPassFilter:
+     def __init__(self, alpha=0.1):
+         self.alpha = alpha
+@@ -173,15 +184,15 @@
+             print("get a wrong device name of joycon")
+         device_serial = self.joycon_id[2][:6]
+         
+-        # init joycon
+-        self.joycon = JoyCon(*self.joycon_id)
+-        
+-        self.gyro = GyroTrackingJoyCon(*self.joycon_id)
++        # init joycon with a single HID handle. Some platforms, especially
++        # macOS, do not allow opening the same Joy-Con multiple times.
++        self.joycon = SharedJoyCon(*self.joycon_id, track_sticks=True)
++        self.gyro = self.joycon
+         self.lerobot = lerobot
+         self.pitch_down_double = pitch_down_double
+         self.rotation_filter_alpha_rate = rotation_filter_alpha_rate
+         self.orientation_sensor = AttitudeEstimator(common_rad=common_rad, lerobot=self.lerobot, pitch_down_double = self.pitch_down_double, lowpassfilter_alpha_rate = self.rotation_filter_alpha_rate)
+-        self.button = ButtonEventJoyCon(*self.joycon_id, track_sticks=True)
++        self.button = self.joycon
+         self.without_rest_init = without_rest_init
+         # print(f"connect to {device} joycon successful.")
+         
+@@ -547,4 +558,4 @@
+     
+     
+     
+-    
+\ No newline at end of file
++    

@@ -1,25 +1,24 @@
 # Local Patches
 
-`xbox_teleop_local.patch` is the local patch applied to the copied XLeRobot Xbox teleoperation example at:
+Patches are applied automatically by `scripts/sync_xlerobot_into_lerobot.sh`
+after syncing XLeRobot sources into the lerobot tree.
 
-```text
-lerobot/examples/xlerobot/5_xlerobot_teleop_xbox.py
-```
+## xbox_teleop_local.patch
 
-Regenerate it after editing the local example:
+Local tweaks to the Xbox teleoperation example at
+`lerobot/examples/xlerobot/5_xlerobot_teleop_xbox.py`.
+
+## joycon_shared_handle.patch
+
+Replaces the three separate HID handles (JoyCon + GyroTrackingJoyCon +
+ButtonEventJoyCon) with a single `SharedJoyCon` handle. macOS does not allow
+opening the same HID device multiple times.
+
+## Regenerating a patch
 
 ```bash
-cd /Users/shaw/Project/ant510
 diff -u \
-  robot/XLeRobot/software/examples/5_xlerobot_teleop_xbox.py \
-  robot/lerobot/examples/xlerobot/5_xlerobot_teleop_xbox.py \
-  > robot/patches/xbox_teleop_local.patch || true
-```
-
-Reapply it after resyncing XLeRobot into LeRobot:
-
-```bash
-cd /Users/shaw/Project/ant510
-patch robot/lerobot/examples/xlerobot/5_xlerobot_teleop_xbox.py \
-  robot/patches/xbox_teleop_local.patch
+  XLeRobot/software/joyconrobotics/joyconrobotics.py \
+  lerobot/src/joyconrobotics/joyconrobotics.py \
+  > patches/joycon_shared_handle.patch || true
 ```
