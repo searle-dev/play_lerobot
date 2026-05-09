@@ -52,6 +52,7 @@ def load_official_joycon_module():
     if not JOYCON_SCRIPT.exists():
         raise FileNotFoundError(f"Missing official Joy-Con example: {JOYCON_SCRIPT}")
 
+    sys.path.insert(0, str(ROOT_DIR))
     sys.path.insert(0, str(XLEROBOT_SOFTWARE))
     sys.path.insert(0, str(LEROBOT_SRC))
     sys.path.insert(0, str(LEROBOT_DIR))
