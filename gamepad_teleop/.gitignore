@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Third-party source checkouts. Local XLeRobot modifications are tracked as patches.
+XLeRobot/
+lerobot/
+
+# Local secrets and generated calibration/runtime state.
+.env
+config/reset_pose.json
+logs/
+patches-xbox-teleop.diff
+
+# Claude Code workspace (temporary)
+claudecode-xlerobot-workspace/

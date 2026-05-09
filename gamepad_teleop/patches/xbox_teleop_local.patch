@@ -1,0 +1,626 @@
+--- robot/XLeRobot/software/examples/5_xlerobot_teleop_xbox.py	2026-05-03 11:16:32
++++ robot/lerobot/examples/xlerobot/5_xlerobot_teleop_xbox.py	2026-05-05 10:19:17
+@@ -12,6 +12,9 @@
+ import numpy as np
+ import math
+ import pygame
++import json
++import os
++from pathlib import Path
+ 
+ from lerobot.robots.xlerobot import XLerobotConfig, XLerobot
+ # from lerobot.utils.robot_utils import busy_wait
+@@ -26,11 +29,14 @@
+     'y+': 'left_stick_right', 'y-': 'left_stick_left',
+     # Left stick pressed controls left arm shoulder_pan
+     'shoulder_pan+': 'left_stick_pressed_right', 'shoulder_pan-': 'left_stick_pressed_left',
++    'wrist_flex+': 'left_stick_pressed_down', 'wrist_flex-': 'left_stick_pressed_up',
++    'direct_wrist': 'left_stick_pressed',
+     # LB pressed controls left arm pitch and wrist_roll
+     'pitch+': 'lb_up', 'pitch-': 'lb_down',
+     'wrist_roll+': 'lb_right', 'wrist_roll-': 'lb_left',
+     # Left trigger controls left gripper
+     'gripper+': 'left_trigger',
++    'gripper-': 'lb_left_trigger',
+     # Head motors
+     "head_motor_1+": 'x', "head_motor_1-": 'b',
+     "head_motor_2+": 'a', "head_motor_2-": 'y',
+@@ -41,11 +47,14 @@
+     'y+': 'right_stick_right', 'y-': 'right_stick_left',
+     # Right stick pressed controls right arm shoulder_pan
+     'shoulder_pan+': 'right_stick_pressed_right', 'shoulder_pan-': 'right_stick_pressed_left',
++    'wrist_flex+': 'right_stick_pressed_down', 'wrist_flex-': 'right_stick_pressed_up',
++    'direct_wrist': 'right_stick_pressed',
+     # RB pressed controls right arm pitch and wrist_roll
+     'pitch+': 'rb_up', 'pitch-': 'rb_down',
+     'wrist_roll+': 'rb_right', 'wrist_roll-': 'rb_left',
+     # Right trigger controls right gripper
+     'gripper+': 'right_trigger',
++    'gripper-': 'rb_right_trigger',
+ }
+ 
+ # Base control keymap - Only forward/backward and rotate left/right
+@@ -56,7 +65,59 @@
+ 
+ # Global reset key for all components
+ RESET_KEY = 'back'
++RESET_POSE_PATH = Path(os.getenv(
++    "XLEROBOT_RESET_POSE",
++    Path(__file__).resolve().parents[3] / "config" / "reset_pose.json",
++))
+ 
++XBOX_BUTTONS_HAT = {
++    "a": 0,
++    "b": 1,
++    "x": 2,
++    "y": 3,
++    "lb": 4,
++    "rb": 5,
++    "back": 6,
++    "menu": 7,
++    "left_stick": 9,
++    "right_stick": 10,
++}
++
++XBOX_BUTTONS_DPAD = {
++    "a": 0,
++    "b": 1,
++    "x": 2,
++    "y": 3,
++    "back": 4,
++    "menu": 6,
++    "left_stick": 7,
++    "right_stick": 8,
++    "lb": 9,
++    "rb": 10,
++    "dpad_up": 11,
++    "dpad_down": 12,
++    "dpad_left": 13,
++    "dpad_right": 14,
++}
++
++XBOX_AXES_HAT = {
++    "left_x": 0,
++    "left_y": 1,
++    "left_trigger": 2,
++    "right_x": 3,
++    "right_y": 4,
++    "right_trigger": 5,
++}
++
++XBOX_AXES_DPAD = {
++    "left_x": 0,
++    "left_y": 1,
++    "right_x": 2,
++    "right_y": 3,
++    "left_trigger": 4,
++    "right_trigger": 5,
++}
++
+ LEFT_JOINT_MAP = {
+     "shoulder_pan": "left_arm_shoulder_pan",
+     "shoulder_lift": "left_arm_shoulder_lift",
+@@ -79,17 +140,31 @@
+     "head_motor_2": "head_motor_2",
+ }
+ 
++def load_reset_pose():
++    if not RESET_POSE_PATH.is_file():
++        print(f"[RESET] No reset pose file found at {RESET_POSE_PATH}. Holding startup pose.")
++        return None
++    with RESET_POSE_PATH.open() as f:
++        pose = json.load(f)
++    print(f"[RESET] Loaded reset pose from {RESET_POSE_PATH}")
++    return pose
++
+ class SimpleHeadControl:
+     def __init__(self, initial_obs, kp=1):
+         self.kp = kp
+         self.degree_step = 1
++        self.normal_degree_step = 1
++        self.precision_degree_step = 0.25
+         # Initialize head motor positions
+         self.target_positions = {
+             "head_motor_1": initial_obs.get("head_motor_1.pos", 0.0),
+             "head_motor_2": initial_obs.get("head_motor_2.pos", 0.0),
+         }
+-        self.zero_pos = {"head_motor_1": 0.0, "head_motor_2": 0.0}
++        self.zero_pos = self.target_positions.copy()
+ 
++    def set_precision_mode(self, enabled):
++        self.degree_step = self.precision_degree_step if enabled else self.normal_degree_step
++
+     def move_to_zero_position(self, robot):
+         self.target_positions = self.zero_pos.copy()
+         action = self.p_control_action(robot)
+@@ -120,6 +195,12 @@
+         return action
+ 
+ class SimpleTeleopArm:
++    MIN_X = 0.06
++    MAX_X = 0.24
++    MIN_Y = -0.03
++    MAX_Y = 0.20
++    WORKSPACE_MARGIN = 0.003
++
+     def __init__(self, kinematics, joint_map, initial_obs, prefix="left", kp=1):
+         self.kinematics = kinematics
+         self.joint_map = joint_map
+@@ -141,40 +222,85 @@
+         # Set the degree step and xy step
+         self.degree_step = 2
+         self.xy_step = 0.005
+-        # Set target positions to zero for P control
+-        self.target_positions = {
+-            "shoulder_pan": 0.0,
+-            "shoulder_lift": 0.0,
+-            "elbow_flex": 0.0,
+-            "wrist_flex": 0.0,
+-            "wrist_roll": 0.0,
+-            "gripper": 0.0,
+-        }
+-        self.zero_pos = {
+-            'shoulder_pan': 0.0,
+-            'shoulder_lift': 0.0,
+-            'elbow_flex': 0.0,
+-            'wrist_flex': 0.0,
+-            'wrist_roll': 0.0,
+-            'gripper': 0.0
+-        }
++        self.gripper_step = 5
++        self.normal_degree_step = 2
++        self.normal_xy_step = 0.005
++        self.normal_gripper_step = 5
++        self.precision_degree_step = 0.5
++        self.precision_xy_step = 0.001
++        self.precision_gripper_step = 1
++        self.gripper_closed = 2
++        self.gripper_open = 90
++        self.target_positions = self.joint_positions.copy()
++        self.zero_pos = self.joint_positions.copy()
++        self.reset_hold = False
+ 
++    def clamp_xy_target(self, x, y):
++        x = max(self.MIN_X, min(self.MAX_X, x))
++        y = max(self.MIN_Y, min(self.MAX_Y, y))
++
++        r = math.hypot(x, y)
++        r_max = self.kinematics.l1 + self.kinematics.l2 - self.WORKSPACE_MARGIN
++        r_min = abs(self.kinematics.l1 - self.kinematics.l2) + self.WORKSPACE_MARGIN
++
++        if r > r_max:
++            scale = r_max / r
++            x *= scale
++            y *= scale
++        elif 0 < r < r_min:
++            scale = r_min / r
++            x *= scale
++            y *= scale
++
++        x = max(self.MIN_X, min(self.MAX_X, x))
++        y = max(self.MIN_Y, min(self.MAX_Y, y))
++        return x, y
++
++    def set_precision_mode(self, enabled):
++        self.degree_step = self.precision_degree_step if enabled else self.normal_degree_step
++        self.xy_step = self.precision_xy_step if enabled else self.normal_xy_step
++        self.gripper_step = self.precision_gripper_step if enabled else self.normal_gripper_step
++
+     def move_to_zero_position(self, robot):
+         print(f"[{self.prefix}] Moving to Zero Position: {self.zero_pos} ......")
+         self.target_positions = self.zero_pos.copy()  # Use copy to avoid reference issues
++        self.reset_hold = True
+         
+-        # Reset kinematic variables to their initial state
+-        self.current_x = 0.1629
+-        self.current_y = 0.1131
+-        self.pitch = 0.0
+-        
+-        # Don't let handle_keys recalculate wrist_flex - set it explicitly
+-        self.target_positions["wrist_flex"] = 0.0
+-        
+         action = self.p_control_action(robot)
+         robot.send_action(action)
+ 
+     def handle_keys(self, key_state):
++        if self.reset_hold:
++            active_controls = any(
++                key_state.get(name)
++                for name in (
++                    "shoulder_pan+",
++                    "shoulder_pan-",
++                    "wrist_roll+",
++                    "wrist_roll-",
++                    "wrist_flex+",
++                    "wrist_flex-",
++                    "gripper+",
++                    "gripper-",
++                    "pitch+",
++                    "pitch-",
++                    "x+",
++                    "x-",
++                    "y+",
++                    "y-",
++                )
++            )
++            if not active_controls:
++                return
++            self.current_x = 0.1629
++            self.current_y = 0.1131
++            self.pitch = (
++                self.target_positions["wrist_flex"]
++                + self.target_positions["shoulder_lift"]
++                + self.target_positions["elbow_flex"]
++            )
++            self.reset_hold = False
++
+         # Joint increments
+         if key_state.get('shoulder_pan+'):
+             self.target_positions["shoulder_pan"] += self.degree_step
+@@ -188,15 +314,36 @@
+         if key_state.get('wrist_roll-'):
+             self.target_positions["wrist_roll"] -= self.degree_step
+             print(f"[{self.prefix}] wrist_roll: {self.target_positions['wrist_roll']}")
++        if key_state.get("wrist_flex+"):
++            self.target_positions["wrist_flex"] += self.degree_step
++            self.pitch = (
++                self.target_positions["wrist_flex"]
++                + self.target_positions["shoulder_lift"]
++                + self.target_positions["elbow_flex"]
++            )
++            print(f"[{self.prefix}] wrist_flex: {self.target_positions['wrist_flex']}")
++        if key_state.get("wrist_flex-"):
++            self.target_positions["wrist_flex"] -= self.degree_step
++            self.pitch = (
++                self.target_positions["wrist_flex"]
++                + self.target_positions["shoulder_lift"]
++                + self.target_positions["elbow_flex"]
++            )
++            print(f"[{self.prefix}] wrist_flex: {self.target_positions['wrist_flex']}")
+         
+-        # Gripper control with auto-close functionality
++        # Gripper control. Trigger closes; bumper+trigger opens; otherwise hold target.
+         if key_state.get('gripper+'):
+-            # Trigger pressed - open gripper (0.1)
+-            self.target_positions["gripper"] = 2
+-            print(f"[{self.prefix}] gripper: CLOSED")
+-        else:
+-            self.target_positions["gripper"] = 90
+-            print(f"[{self.prefix}] gripper: auto-opening to {self.target_positions['gripper']:.1f}")
++            self.target_positions["gripper"] = max(
++                self.gripper_closed,
++                self.target_positions["gripper"] - self.gripper_step,
++            )
++            print(f"[{self.prefix}] gripper closing: {self.target_positions['gripper']:.1f}")
++        if key_state.get('gripper-'):
++            self.target_positions["gripper"] = min(
++                self.gripper_open,
++                self.target_positions["gripper"] + self.gripper_step,
++            )
++            print(f"[{self.prefix}] gripper opening: {self.target_positions['gripper']:.1f}")
+         
+         if key_state.get('pitch+'):
+             self.pitch += self.degree_step
+@@ -207,34 +354,36 @@
+ 
+         # XY plane (IK)
+         moved = False
++        next_x = self.current_x
++        next_y = self.current_y
+         if key_state.get('x+'):
+-            self.current_x += self.xy_step
++            next_x += self.xy_step
+             moved = True
+-            print(f"[{self.prefix}] x+: {self.current_x:.4f}, y: {self.current_y:.4f}")
+         if key_state.get('x-'):
+-            self.current_x -= self.xy_step
++            next_x -= self.xy_step
+             moved = True
+-            print(f"[{self.prefix}] x-: {self.current_x:.4f}, y: {self.current_y:.4f}")
+         if key_state.get('y+'):
+-            self.current_y += self.xy_step
++            next_y += self.xy_step
+             moved = True
+-            print(f"[{self.prefix}] x: {self.current_x:.4f}, y+: {self.current_y:.4f}")
+         if key_state.get('y-'):
+-            self.current_y -= self.xy_step
++            next_y -= self.xy_step
+             moved = True
+-            print(f"[{self.prefix}] x: {self.current_x:.4f}, y-: {self.current_y:.4f}")
+         if moved:
++            self.current_x, self.current_y = self.clamp_xy_target(next_x, next_y)
++            print(f"[{self.prefix}] x: {self.current_x:.4f}, y: {self.current_y:.4f}")
+             joint2, joint3 = self.kinematics.inverse_kinematics(self.current_x, self.current_y)
+             self.target_positions["shoulder_lift"] = joint2
+             self.target_positions["elbow_flex"] = joint3
+             print(f"[{self.prefix}] shoulder_lift: {joint2}, elbow_flex: {joint3}")
+ 
+-        # Wrist flex is always coupled to pitch and the other two
+-        self.target_positions["wrist_flex"] = (
+-            -self.target_positions["shoulder_lift"]
+-            -self.target_positions["elbow_flex"]
+-            + self.pitch
+-        )
++        # Wrist flex is coupled to pitch during Cartesian IK moves. In direct
++        # wrist mode (stick pressed), leave wrist_flex under direct control.
++        if not key_state.get("direct_wrist"):
++            self.target_positions["wrist_flex"] = (
++                -self.target_positions["shoulder_lift"]
++                -self.target_positions["elbow_flex"]
++                + self.pitch
++            )
+         # print(f"[{self.prefix}] wrist_flex: {self.target_positions['wrist_flex']}")
+ 
+     def p_control_action(self, robot):
+@@ -257,84 +406,122 @@
+     axes = [joystick.get_axis(i) for i in range(joystick.get_numaxes())]
+     buttons = [joystick.get_button(i) for i in range(joystick.get_numbuttons())]
+     hats = joystick.get_hat(0) if joystick.get_numhats() > 0 else (0, 0)
++    button_map = XBOX_BUTTONS_HAT if joystick.get_numhats() > 0 else XBOX_BUTTONS_DPAD
++    axis_map = XBOX_AXES_HAT if joystick.get_numhats() > 0 else XBOX_AXES_DPAD
++
++    def button_pressed(name):
++        idx = button_map.get(name)
++        return bool(buttons[idx]) if idx is not None and len(buttons) > idx else False
++
++    def axis_value(name):
++        idx = axis_map.get(name)
++        return axes[idx] if idx is not None and len(axes) > idx else 0.0
++
++    def dpad_pressed(direction):
++        if joystick.get_numhats() > 0:
++            if direction == "up":
++                return hats[1] == 1
++            if direction == "down":
++                return hats[1] == -1
++            if direction == "left":
++                return hats[0] == -1
++            if direction == "right":
++                return hats[0] == 1
++        return button_pressed(f"dpad_{direction}")
+     
+     # Get stick pressed states
+-    left_stick_pressed = bool(buttons[9]) if len(buttons) > 9 else False
+-    right_stick_pressed = bool(buttons[10]) if len(buttons) > 10 else False
+-    lb_pressed = bool(buttons[4]) if len(buttons) > 4 else False
+-    rb_pressed = bool(buttons[5]) if len(buttons) > 5 else False
++    left_stick_pressed = button_pressed("left_stick")
++    right_stick_pressed = button_pressed("right_stick")
++    lb_pressed = button_pressed("lb")
++    rb_pressed = button_pressed("rb")
+ 
+     # Map controller state to semantic actions
+     state = {}
+     for action, control in keymap.items():
+         if control == 'left_trigger':
+-            state[action] = axes[2] > 0.5 if len(axes) > 2 else False
++            state[action] = (not lb_pressed) and axis_value("left_trigger") > 0.5
++        elif control == 'lb_left_trigger':
++            state[action] = lb_pressed and axis_value("left_trigger") > 0.5
+         elif control == 'right_trigger':
+-            state[action] = axes[5] > 0.5 if len(axes) > 5 else False
++            state[action] = (not rb_pressed) and axis_value("right_trigger") > 0.5
++        elif control == 'rb_right_trigger':
++            state[action] = rb_pressed and axis_value("right_trigger") > 0.5
+         elif control == 'a':
+-            state[action] = bool(buttons[0])
++            state[action] = button_pressed("a")
+         elif control == 'b':
+-            state[action] = bool(buttons[1])
++            state[action] = button_pressed("b")
+         elif control == 'x':
+-            state[action] = bool(buttons[2])
++            state[action] = button_pressed("x")
+         elif control == 'y':
+-            state[action] = bool(buttons[3])
++            state[action] = button_pressed("y")
+         elif control == 'back':
+-            state[action] = bool(buttons[6])
++            state[action] = button_pressed("back")
+         elif control == 'dpad_up':
+-            state[action] = hats[1] == 1
++            state[action] = dpad_pressed("up")
+         elif control == 'dpad_down':
+-            state[action] = hats[1] == -1
++            state[action] = dpad_pressed("down")
+         elif control == 'dpad_left':
+-            state[action] = hats[0] == -1
++            state[action] = dpad_pressed("left")
+         elif control == 'dpad_right':
+-            state[action] = hats[0] == 1
++            state[action] = dpad_pressed("right")
+         # Left stick controls (when not pressed)
+         elif control == 'left_stick_up':
+-            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axes[1] < -0.5) if len(axes) > 1 else False
++            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axis_value("left_y") < -0.5)
+         elif control == 'left_stick_down':
+-            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axes[1] > 0.5) if len(axes) > 1 else False
++            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axis_value("left_y") > 0.5)
+         elif control == 'left_stick_left':
+-            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axes[0] < -0.5) if len(axes) > 0 else False
++            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axis_value("left_x") < -0.5)
+         elif control == 'left_stick_right':
+-            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axes[0] > 0.5) if len(axes) > 0 else False
++            state[action] = (not left_stick_pressed) and (not lb_pressed) and (axis_value("left_x") > 0.5)
+         # Right stick controls (when not pressed) - Fixed axis mapping
+         elif control == 'right_stick_up':
+-            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axes[4] < -0.5) if len(axes) > 4 else False
++            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axis_value("right_y") < -0.5)
+         elif control == 'right_stick_down':
+-            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axes[4] > 0.5) if len(axes) > 4 else False
++            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axis_value("right_y") > 0.5)
+         elif control == 'right_stick_left':
+-            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axes[3] < -0.5) if len(axes) > 3 else False
++            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axis_value("right_x") < -0.5)
+         elif control == 'right_stick_right':
+-            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axes[3] > 0.5) if len(axes) > 3 else False
++            state[action] = (not right_stick_pressed) and (not rb_pressed) and (axis_value("right_x") > 0.5)
+         # Left stick pressed controls
+         elif control == 'left_stick_pressed_right':
+-            state[action] = left_stick_pressed and (not lb_pressed) and (axes[0] > 0.5) if len(axes) > 0 else False
++            state[action] = left_stick_pressed and (not lb_pressed) and (axis_value("left_x") > 0.5)
+         elif control == 'left_stick_pressed_left':
+-            state[action] = left_stick_pressed and (not lb_pressed) and (axes[0] < -0.5) if len(axes) > 0 else False
++            state[action] = left_stick_pressed and (not lb_pressed) and (axis_value("left_x") < -0.5)
++        elif control == 'left_stick_pressed_up':
++            state[action] = left_stick_pressed and (not lb_pressed) and (axis_value("left_y") < -0.5)
++        elif control == 'left_stick_pressed_down':
++            state[action] = left_stick_pressed and (not lb_pressed) and (axis_value("left_y") > 0.5)
++        elif control == 'left_stick_pressed':
++            state[action] = left_stick_pressed
+         # Right stick pressed controls - Fixed axis mapping
+         elif control == 'right_stick_pressed_right':
+-            state[action] = right_stick_pressed and (not rb_pressed) and (axes[3] > 0.5) if len(axes) > 3 else False
++            state[action] = right_stick_pressed and (not rb_pressed) and (axis_value("right_x") > 0.5)
+         elif control == 'right_stick_pressed_left':
+-            state[action] = right_stick_pressed and (not rb_pressed) and (axes[3] < -0.5) if len(axes) > 3 else False
++            state[action] = right_stick_pressed and (not rb_pressed) and (axis_value("right_x") < -0.5)
++        elif control == 'right_stick_pressed_up':
++            state[action] = right_stick_pressed and (not rb_pressed) and (axis_value("right_y") < -0.5)
++        elif control == 'right_stick_pressed_down':
++            state[action] = right_stick_pressed and (not rb_pressed) and (axis_value("right_y") > 0.5)
++        elif control == 'right_stick_pressed':
++            state[action] = right_stick_pressed
+         # LB pressed controls (only when stick is moved)
+         elif control == 'lb_up':
+-            state[action] = lb_pressed and (abs(axes[1]) > 0.5) and (axes[1] < -0.5) if len(axes) > 1 else False
++            state[action] = lb_pressed and (abs(axis_value("left_y")) > 0.5) and (axis_value("left_y") < -0.5)
+         elif control == 'lb_down':
+-            state[action] = lb_pressed and (abs(axes[1]) > 0.5) and (axes[1] > 0.5) if len(axes) > 1 else False
++            state[action] = lb_pressed and (abs(axis_value("left_y")) > 0.5) and (axis_value("left_y") > 0.5)
+         elif control == 'lb_right':
+-            state[action] = lb_pressed and (abs(axes[0]) > 0.5) and (axes[0] > 0.5) if len(axes) > 0 else False
++            state[action] = lb_pressed and (abs(axis_value("left_x")) > 0.5) and (axis_value("left_x") > 0.5)
+         elif control == 'lb_left':
+-            state[action] = lb_pressed and (abs(axes[0]) > 0.5) and (axes[0] < -0.5) if len(axes) > 0 else False
++            state[action] = lb_pressed and (abs(axis_value("left_x")) > 0.5) and (axis_value("left_x") < -0.5)
+         # RB pressed controls (only when stick is moved)
+         elif control == 'rb_up':
+-            state[action] = rb_pressed and (abs(axes[4]) > 0.5) and (axes[4] < -0.5) if len(axes) > 4 else False
++            state[action] = rb_pressed and (abs(axis_value("right_y")) > 0.5) and (axis_value("right_y") < -0.5)
+         elif control == 'rb_down':
+-            state[action] = rb_pressed and (abs(axes[4]) > 0.5) and (axes[4] > 0.5) if len(axes) > 4 else False
++            state[action] = rb_pressed and (abs(axis_value("right_y")) > 0.5) and (axis_value("right_y") > 0.5)
+         elif control == 'rb_right':
+-            state[action] = rb_pressed and (abs(axes[3]) > 0.5) and (axes[3] > 0.5) if len(axes) > 3 else False
++            state[action] = rb_pressed and (abs(axis_value("right_x")) > 0.5) and (axis_value("right_x") > 0.5)
+         elif control == 'rb_left':
+-            state[action] = rb_pressed and (abs(axes[3]) > 0.5) and (axes[3] < -0.5) if len(axes) > 3 else False
++            state[action] = rb_pressed and (abs(axis_value("right_x")) > 0.5) and (axis_value("right_x") < -0.5)
+         else:
+             state[action] = False
+     return state
+@@ -346,18 +533,35 @@
+     # Read controller state
+     buttons = [joystick.get_button(i) for i in range(joystick.get_numbuttons())]
+     hats = joystick.get_hat(0) if joystick.get_numhats() > 0 else (0, 0)
++    button_map = XBOX_BUTTONS_HAT if joystick.get_numhats() > 0 else XBOX_BUTTONS_DPAD
++
++    def button_pressed(name):
++        idx = button_map.get(name)
++        return bool(buttons[idx]) if idx is not None and len(buttons) > idx else False
++
++    def dpad_pressed(direction):
++        if joystick.get_numhats() > 0:
++            if direction == "up":
++                return hats[1] == 1
++            if direction == "down":
++                return hats[1] == -1
++            if direction == "left":
++                return hats[0] == -1
++            if direction == "right":
++                return hats[0] == 1
++        return button_pressed(f"dpad_{direction}")
+     
+     # Get pressed keys for base control
+     pressed_keys = set()
+     
+     # Map controller inputs to keyboard-like keys for base control
+-    if hats[1] == 1:   # D-pad up
++    if dpad_pressed("up"):
+         pressed_keys.add('k')  # Forward
+-    if hats[1] == -1:  # D-pad down
++    if dpad_pressed("down"):
+         pressed_keys.add('i')  # Backward
+-    if hats[0] == -1:  # D-pad left
++    if dpad_pressed("left"):
+         pressed_keys.add('u')  # Rotate left
+-    if hats[0] == 1:   # D-pad right
++    if dpad_pressed("right"):
+         pressed_keys.add('o')  # Rotate right
+     
+     # Convert to numpy array and get base action
+@@ -373,10 +577,15 @@
+     """
+     # Read controller state
+     buttons = [joystick.get_button(i) for i in range(joystick.get_numbuttons())]
++    button_map = XBOX_BUTTONS_HAT if joystick.get_numhats() > 0 else XBOX_BUTTONS_DPAD
++
++    def button_pressed(name):
++        idx = button_map.get(name)
++        return bool(buttons[idx]) if idx is not None and len(buttons) > idx else False
+     
+     # Get LB and RB states
+-    lb_pressed = bool(buttons[4]) if len(buttons) > 4 else False
+-    rb_pressed = bool(buttons[5]) if len(buttons) > 5 else False
++    lb_pressed = button_pressed("lb")
++    rb_pressed = button_pressed("rb")
+     
+     # Get current speed level from global variable
+     global current_base_speed_level
+@@ -433,20 +642,40 @@
+     left_arm = SimpleTeleopArm(kin_left, LEFT_JOINT_MAP, obs, prefix="left")
+     right_arm = SimpleTeleopArm(kin_right, RIGHT_JOINT_MAP, obs, prefix="right")
+     head_control = SimpleHeadControl(obs)
++    reset_pose = load_reset_pose()
++    if reset_pose:
++        left_arm.zero_pos.update(reset_pose.get("left_arm", {}))
++        right_arm.zero_pos.update(reset_pose.get("right_arm", {}))
++        head_control.zero_pos.update(reset_pose.get("head", {}))
++    precision_mode = False
++    menu_was_pressed = False
+ 
+-    # Move both arms and head to zero position at start
++    # Move both arms and head to recorded reset position, or hold startup pose if none is recorded.
+     left_arm.move_to_zero_position(robot)
+     right_arm.move_to_zero_position(robot)
++    head_control.move_to_zero_position(robot)
+ 
+     try:
+         while True:
++            loop_start = time.perf_counter()
+             pygame.event.pump()
+             left_key_state = get_xbox_key_state(joystick, LEFT_KEYMAP)
+             right_key_state = get_xbox_key_state(joystick, RIGHT_KEYMAP)
+             
+             # Check for global reset (back button)
+             buttons = [joystick.get_button(i) for i in range(joystick.get_numbuttons())]
+-            global_reset = bool(buttons[6]) if len(buttons) > 6 else False
++            button_map = XBOX_BUTTONS_HAT if joystick.get_numhats() > 0 else XBOX_BUTTONS_DPAD
++            back_idx = button_map["back"]
++            global_reset = bool(buttons[back_idx]) if len(buttons) > back_idx else False
++            menu_idx = button_map.get("menu")
++            menu_pressed = bool(buttons[menu_idx]) if menu_idx is not None and len(buttons) > menu_idx else False
++            if menu_pressed and not menu_was_pressed:
++                precision_mode = not precision_mode
++                left_arm.set_precision_mode(precision_mode)
++                right_arm.set_precision_mode(precision_mode)
++                head_control.set_precision_mode(precision_mode)
++                print(f"[MAIN] Precision mode: {'ON' if precision_mode else 'OFF'}")
++            menu_was_pressed = menu_pressed
+             
+             # Handle global reset for all components
+             if global_reset:
+@@ -481,9 +710,10 @@
+ 
+             obs = robot.get_observation()
+             log_rerun_data(obs, action)
++            precise_sleep(max(1 / FPS - (time.perf_counter() - loop_start), 0))
+     finally:
+         robot.disconnect()
+         print("Teleoperation ended.")
+ 
+ if __name__ == "__main__":
+-    main()
+\ No newline at end of file
++    main()
