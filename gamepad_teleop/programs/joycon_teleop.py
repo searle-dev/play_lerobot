@@ -38,9 +38,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--robot-id", default=os.getenv("XLEROBOT_ID", "my_xlerobot"))
     parser.add_argument(
         "--mode",
-        choices=("both", "right-only"),
+        choices=("both", "left-only", "right-only"),
         default=os.getenv("XLEROBOT_JOYCON_MODE", "both"),
-        help="Use both Joy-Cons or only the right Joy-Con for bring-up/debugging.",
+        help="Use both Joy-Cons, or only left/right Joy-Con.",
     )
     parser.add_argument(
         "--no-disable-torque-on-disconnect",
@@ -170,6 +170,8 @@ def main() -> None:
 
     if args.mode == "right-only":
         main_right_only(module, args.reset_pose)
+    elif args.mode == "left-only":
+        main_left_only(module, args.reset_pose)
     else:
         main_both(module, args.reset_pose)
 
@@ -374,6 +376,86 @@ def main_right_only(module, reset_pose_path: Path) -> None:
     finally:
         if joycon_right is not None:
             joycon_right.disconnect()
+        robot.disconnect()
+        print("Teleoperation ended.")
+
+
+def main_left_only(module, reset_pose_path: Path) -> None:
+    fps = 30
+    reset_pose = load_reset_pose(reset_pose_path)
+
+    robot = module.XLerobot(module.XLerobotConfig())
+    joycon_left = None
+
+    try:
+        robot.connect()
+        print("[MAIN] Successfully connected to robot")
+
+        print("[MAIN] Initializing left Joy-Con controller...")
+        joycon_left = module.FixedAxesJoyconRobotics("left", dof_speed=[2, 2, 2, 1, 1, 1])
+        print("[MAIN] Left Joy-Con controller connected")
+
+        obs = robot.get_observation()
+        kin_left = module.SO101Kinematics()
+        kin_right = module.SO101Kinematics()
+        left_arm = module.SimpleTeleopArm(module.LEFT_JOINT_MAP, obs, kin_left, prefix="left")
+        right_arm = module.SimpleTeleopArm(module.RIGHT_JOINT_MAP, obs, kin_right, prefix="right")
+        head_control = module.SimpleHeadControl(obs)
+
+        offsets = None
+        if reset_pose:
+            neutral = compute_neutral_targets(module)
+            offsets = compute_offsets(reset_pose, neutral)
+
+            print("[MAIN] Moving to reset pose on startup...")
+            converge_to_pose(
+                [(left_arm, "left_arm"), (right_arm, "right_arm")],
+                head_control, robot, reset_pose,
+                module.time, module.precise_sleep,
+            )
+            joycon_left.reset_joycon()
+        else:
+            left_arm.move_to_zero_position(robot)
+            right_arm.move_to_zero_position(robot)
+            head_control.move_to_zero_position(robot)
+
+        print("[MAIN] Starting teleoperation loop...")
+        while True:
+            loop_start = module.time.perf_counter()
+            pose_left, gripper_left, control_button_left = joycon_left.get_control()
+
+            if joycon_left.reset_button == 1:
+                if reset_pose:
+                    print("[MAIN] Reset to reset pose!")
+                    converge_to_pose(
+                        [(left_arm, "left_arm"), (right_arm, "right_arm")],
+                        head_control, robot, reset_pose,
+                        module.time, module.precise_sleep, max_seconds=2,
+                    )
+                    joycon_left.reset_joycon()
+                else:
+                    left_arm.move_to_zero_position(robot)
+                    right_arm.move_to_zero_position(robot)
+                    head_control.move_to_zero_position(robot)
+                continue
+
+            left_arm.target_positions["gripper"] = gripper_left
+            precision_l = joycon_left.joycon.get_button_left_sr() == 1 or joycon_left.joycon.get_button_left_sl() == 1
+            left_arm.handle_joycon_input(pose_left, gripper_left, precision=precision_l)
+            if offsets:
+                apply_offsets(left_arm, offsets["left_arm"])
+
+            left_action = left_arm.p_control_action(robot)
+            right_action = right_arm.p_control_action(robot)
+            head_control.handle_joycon_input(joycon_left)
+            head_action = head_control.p_control_action(robot)
+
+            action = {**left_action, **right_action, **head_action}
+            robot.send_action(action)
+            module.precise_sleep(max(1 / fps - (module.time.perf_counter() - loop_start), 0))
+    finally:
+        if joycon_left is not None:
+            joycon_left.disconnect()
         robot.disconnect()
         print("Teleoperation ended.")
 
